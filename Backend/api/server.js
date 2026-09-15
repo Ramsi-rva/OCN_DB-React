@@ -241,6 +241,108 @@ app.get('/api/catalogos', async (req, res) => {
 })
 
 // ─────────────────────────────────────────────────────────────
+// GET /api/procedimientos/intervenciones-buscar?estado=&id_zona=&tipo=&desde=&hasta=
+// Ejecuta: OCN.sp_intervencion_buscar (SQL dinámico, parámetros opcionales)
+// ─────────────────────────────────────────────────────────────
+app.get('/api/procedimientos/intervenciones-buscar', async (req, res) => {
+  const { estado, id_zona, tipo, desde, hasta } = req.query
+  try {
+    const p = await getPool()
+    const request = p.request()
+    if (estado)  request.input('estado', sql.VarChar(20), estado)
+    if (id_zona) request.input('id_zona', sql.Int, parseInt(id_zona))
+    if (tipo)    request.input('tipo_intervencion', sql.VarChar(100), tipo)
+    if (desde)   request.input('fecha_desde', sql.DateTime, new Date(desde))
+    if (hasta)   request.input('fecha_hasta', sql.DateTime, new Date(hasta + 'T23:59:59'))
+
+    const result = await request.execute('OCN.sp_intervencion_buscar')
+    res.json(result.recordset)
+  } catch (err) {
+    handleError(res, err)
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/procedimientos/registrar-intervencion
+// Ejecuta: OCN.sp_intervencion_registrar_completa (transacción + TRY/CATCH)
+// ─────────────────────────────────────────────────────────────
+app.post('/api/procedimientos/registrar-intervencion', async (req, res) => {
+  const {
+    id_deteccion, id_recurso, tipo_intervencion, descripcion_intervencion,
+    responsable, fecha_planeada, estado,
+  } = req.body
+
+  try {
+    const p = await getPool()
+    const result = await p.request()
+      .input('id_deteccion', sql.Int, parseInt(id_deteccion))
+      .input('id_recurso', sql.Int, id_recurso ? parseInt(id_recurso) : null)
+      .input('tipo_intervencion', sql.VarChar(100), tipo_intervencion)
+      .input('descripcion_intervencion', sql.VarChar(255), descripcion_intervencion)
+      .input('responsable', sql.VarChar(100), responsable)
+      .input('fecha_planeada', sql.DateTime, new Date(fecha_planeada))
+      .input('estado', sql.VarChar(20), estado)
+      .output('id_intervencion_generada', sql.Int)
+      .execute('OCN.sp_intervencion_registrar_completa')
+
+    res.json({
+      resultado: 'Intervención registrada correctamente.',
+      id: result.output.id_intervencion_generada,
+    })
+  } catch (err) {
+    handleError(res, err)
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/catalogos-intervencion  →  detecciones, recursos y zonas para el form
+// ─────────────────────────────────────────────────────────────
+app.get('/api/catalogos-intervencion', async (req, res) => {
+  try {
+    const p = await getPool()
+    const [det, rec, zon] = await Promise.all([
+      p.request().query(`
+        select d.id_deteccion, z.nombre_zona as zona, pr.nombre_problematica as problematica
+        from OCN.deteccion d
+        inner join OCN.levantamiento l on d.id_levantamiento = l.id_levantamiento
+        inner join OCN.zona z on l.id_zona = z.id_zona
+        inner join OCN.problematica pr on d.id_problematica = pr.id_problematica
+      `),
+      p.request().query('select id_recurso, nombre_recurso from OCN.recurso_comunitario'),
+      p.request().query('select id_zona, nombre_zona from OCN.zona order by nombre_zona'),
+    ])
+    res.json({ detecciones: det.recordset, recursos: rec.recordset, zonas: zon.recordset })
+  } catch (err) {
+    handleError(res, err)
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/procedimientos/eliminar-intervencion/:id
+// Ejecuta: DELETE FROM OCN.intervencion (dispara trg_intervencion_bloquear_borrado_completada)
+// ─────────────────────────────────────────────────────────────
+app.delete('/api/procedimientos/eliminar-intervencion/:id', async (req, res) => {
+  const id = parseInt(req.params.id)
+  if (!id) {
+    return res.status(400).json({ message: 'ID de intervención inválido.' })
+  }
+  try {
+    const p = await getPool()
+    await p.request()
+      .input('id_intervencion', sql.Int, id)
+      .query('DELETE FROM OCN.intervencion WHERE id_intervencion = @id_intervencion')
+
+    res.json({ resultado: 'Intervención eliminada correctamente.' })
+  } catch (err) {
+    // El trigger lanza RAISERROR con severidad 16 cuando el estado es 'Completada'
+    if (err.message && err.message.includes('No se permite eliminar')) {
+      return res.status(409).json({ message: err.message })
+    }
+    handleError(res, err)
+  }
+})
+
+// ─────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n  OCN API corriendo en http://localhost:${PORT}`)
   console.log(`  Base de datos: ${config.database} en ${config.server}\n`)

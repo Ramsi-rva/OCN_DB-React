@@ -50,3 +50,27 @@ export const getResumenZona = (idZona = null) => {
 
 // ── Catálogos para el formulario ──────────────────────────────
 export const getCatalogos = () => request('/catalogos')
+
+// ── SP dinámico: buscar intervenciones con filtros opcionales ─
+export const getIntervenciones = (filtros = {}) => {
+  const params = new URLSearchParams(
+    Object.fromEntries(Object.entries(filtros).filter(([, v]) => v))
+  )
+  const qs = params.toString()
+  return request(`/procedimientos/intervenciones-buscar${qs ? `?${qs}` : ''}`)
+}
+
+// ── SP transaccional: registrar intervención completa ─────────
+export const registrarIntervencion = (datos) =>
+  request('/procedimientos/registrar-intervencion', {
+    method: 'POST',
+    body: JSON.stringify(datos),
+  })
+
+// ── Catálogos para el formulario de intervenciones ─────────────
+export const getCatalogosIntervencion = () => request('/catalogos-intervencion')
+// ── Trigger: eliminar intervención (bloqueado si está Completada) ─
+export const eliminarIntervencion = (id) =>
+  request(`/procedimientos/eliminar-intervencion/${id}`, {
+    method: 'DELETE',
+  })

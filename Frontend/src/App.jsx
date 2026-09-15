@@ -4,6 +4,8 @@ import Dashboard    from './pages/dashboard'
 import Detecciones  from './pages/detecciones'
 import Estadisticas from './pages/estadisticas'
 import Registrar    from './pages/registrar'
+import Intervenciones         from './pages/intervenciones'
+import RegistrarIntervencion  from './pages/registrarIntervencion'
 import PorFecha     from './pages/porFecha'
 
 const PAGES = [
@@ -12,6 +14,8 @@ const PAGES = [
   { id: 'estadisticas', label: 'Estadísticas',        icon: '◧' },
   { id: 'por-fecha',    label: 'Consulta por fecha',  icon: '◷' },
   { id: 'registrar',    label: 'Registrar detección', icon: '◎' },
+  { id: 'intervenciones',        label: 'Intervenciones',           icon: '◆' },
+  { id: 'registrar-intervencion', label: 'Registrar intervención',   icon: '✚' },
 ]
 
 export default function App() {
@@ -37,6 +41,8 @@ export default function App() {
       case 'estadisticas': return <Estadisticas />
       case 'por-fecha':    return <PorFecha />
       case 'registrar':    return <Registrar />
+      case 'intervenciones':         return <Intervenciones setPage={setPage} />
+      case 'registrar-intervencion': return <RegistrarIntervencion />
       default:             return <Dashboard    setPage={setPage} dbStatus={dbStatus} />
     }
   }
